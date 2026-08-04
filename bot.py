@@ -9,7 +9,7 @@ if not TOKEN or not GEMINI_KEY:
     raise Exception("Не найдены переменные окружения! Настрой TELEGRAM_TOKEN и GEMINI_API_KEY на Render.")
 
 genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
+model = genai.GenerativeModel("gemini-2.0-flash-lite")
 bot = telebot.TeleBot(TOKEN)
 
 @bot.message_handler(func=lambda m: True)
