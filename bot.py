@@ -13,7 +13,7 @@ if not TOKEN or not GEMINI_KEY:
 genai.configure(api_key=GEMINI_KEY)
 
 # 🔥 ВОТ ТУТ ВЫБИРАЕМ МОДЕЛЬ (работает 100%)
-model = genai.GenerativeModel("gemini-2.0-flash-exp")
+model = genai.GenerativeModel("gemini-2.0-flash")
 
 # ===== СОЗДАЕМ БОТА =====
 bot = telebot.TeleBot(TOKEN)
