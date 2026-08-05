@@ -1,6 +1,7 @@
 import telebot
 import requests
 import os
+import json
 
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 VENICE_KEY = os.environ.get("VENICE_API_KEY")
@@ -46,10 +47,11 @@ def send_info(message):
         parse_mode="Markdown"
     )
 
-# ===== ОБРАБОТЧИК ЛЮБОГО ТЕКСТА =====
+# ===== ОБРАБОТЧИК ЛЮБОГО ТЕКСТА (С ОТЛАДКОЙ!) =====
 @bot.message_handler(func=lambda m: True)
 def reply_to_message(message):
     try:
+        # Отправляем запрос в Venice API
         response = requests.post(
             "https://api.venice.ai/api/v1/chat/completions",
             headers={
@@ -59,13 +61,34 @@ def reply_to_message(message):
             json={
                 "model": "llama-3.3-70b-instruct",
                 "messages": [{"role": "user", "content": message.text}]
-            }
+            },
+            timeout=30
         )
+        
+        # Проверяем статус HTTP
+        if response.status_code != 200:
+            error_text = f"❌ HTTP {response.status_code}\n\n{response.text[:500]}"
+            bot.reply_to(message, error_text)
+            return
+        
+        # Парсим JSON
         data = response.json()
+        
+        # Проверяем, есть ли поле choices
+        if "choices" not in data:
+            debug_info = f"🔍 Странный ответ от Venice:\n\n```json\n{json.dumps(data, indent=2)[:1000]}\n```"
+            bot.reply_to(message, debug_info, parse_mode="Markdown")
+            return
+        
+        # Всё хорошо — отправляем ответ
         bot.reply_to(message, data["choices"][0]["message"]["content"][:4000])
+        
+    except requests.exceptions.Timeout:
+        bot.reply_to(message, "⏰ Превышено время ожидания от Venice API. Попробуй ещё раз.")
     except Exception as e:
-        bot.reply_to(message, f"❌ Ошибка: {e}")
+        bot.reply_to(message, f"❌ Ошибка: {str(e)}")
 
 # ===== ЗАПУСК =====
-print("✅ Бот запущен на Venice.ai!")
+print("✅ Бот запущен на Venice.ai с отладкой!")
+print(f"🔑 Ключ Venice: {VENICE_KEY[:20]}... (скрыто)")
 bot.infinity_polling()
