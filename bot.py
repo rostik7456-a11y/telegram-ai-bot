@@ -2,9 +2,11 @@ import telebot
 import requests
 import os
 import json
+import time
 
+# ===== ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ =====
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
-VENICE_KEY = os.environ.get("VENICE_API_KEY")
+GATEWAY_URL = os.environ.get("GATEWAY_URL", "https://ai-gateway.onrender.com/v1/chat/completions")
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -13,12 +15,14 @@ bot = telebot.TeleBot(TOKEN)
 def send_welcome(message):
     bot.reply_to(
         message,
-        "🤖 *Привет! Я твой личный ИИ-помощник на базе Venice.ai!*\n\n"
+        "🤖 *Привет! Я твой личный ИИ-помощник!*\n\n"
+        "Я работаю через AI Gateway, который объединяет 5+ бесплатных ИИ-провайдеров.\n"
         "Просто напиши мне что угодно — я отвечу на любой вопрос.\n\n"
         "📌 *Команды:*\n"
         "/start — показать это сообщение\n"
         "/help — помощь\n"
-        "/info — информация о боте",
+        "/info — информация о боте\n"
+        "/status — статус шлюза",
         parse_mode="Markdown"
     )
 
@@ -40,55 +44,70 @@ def send_info(message):
     bot.reply_to(
         message,
         "ℹ️ *Информация о боте*\n\n"
-        "🧠 *Модель:* Llama 3.3 70B (Venice.ai)\n"
+        "🧠 *Модели:* Llama 3.3 70B, Qwen, Gemma и другие\n"
+        "🔗 *Шлюз:* AI Gateway (5+ провайдеров)\n"
         "👨‍💻 *Создатель:* твой братан\n"
         "🌐 *Хостинг:* Render.com\n"
-        "💬 *Особенности:* отвечает на любые вопросы, 60 запросов в минуту, бесплатно!",
+        "💬 *Особенности:* автоматическое переключение при ошибках, 100+ запросов в минуту",
         parse_mode="Markdown"
     )
 
-# ===== ОБРАБОТЧИК ЛЮБОГО ТЕКСТА (С ОТЛАДКОЙ!) =====
+# ===== КОМАНДА /status =====
+@bot.message_handler(commands=['status'])
+def send_status(message):
+    try:
+        response = requests.get(
+            GATEWAY_URL.replace("/v1/chat/completions", "/health"),
+            timeout=10
+        )
+        if response.status_code == 200:
+            data = response.json()
+            status_text = "🟢 *Статус шлюза:* Работает\n\n"
+            status_text += "📊 *Провайдеры:*\n"
+            for name, available in data.get("providers", {}).items():
+                status_text += f"  {'✅' if available else '❌'} {name}\n"
+            bot.reply_to(message, status_text, parse_mode="Markdown")
+        else:
+            bot.reply_to(message, "🔴 Шлюз недоступен. Проверь настройки.")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Ошибка при проверке статуса: {e}")
+
+# ===== ОБРАБОТЧИК ЛЮБОГО ТЕКСТА =====
 @bot.message_handler(func=lambda m: True)
 def reply_to_message(message):
     try:
-        # Отправляем запрос в Venice API
+        # Отправляем запрос к шлюзу
         response = requests.post(
-            "https://api.venice.ai/api/v1/chat/completions",
-            headers={
-                "X-Venice-API-Key": VENICE_KEY,
-                "Content-Type": "application/json"
-            },
+            GATEWAY_URL,
+            headers={"Content-Type": "application/json"},
             json={
-                "model": "llama-3.3-70b-instruct",
                 "messages": [{"role": "user", "content": message.text}]
             },
-            timeout=30
+            timeout=60
         )
         
-        # Проверяем статус HTTP
+        # Проверяем статус
         if response.status_code != 200:
-            error_text = f"❌ HTTP {response.status_code}\n\n{response.text[:500]}"
+            error_text = f"❌ Шлюз вернул ошибку {response.status_code}\n\n{response.text[:300]}"
             bot.reply_to(message, error_text)
             return
         
-        # Парсим JSON
+        # Парсим ответ
         data = response.json()
         
-        # Проверяем, есть ли поле choices
         if "choices" not in data:
-            debug_info = f"🔍 Странный ответ от Venice:\n\n```json\n{json.dumps(data, indent=2)[:1000]}\n```"
-            bot.reply_to(message, debug_info, parse_mode="Markdown")
+            bot.reply_to(message, f"❌ Странный ответ от шлюза:\n{json.dumps(data, indent=2)[:500]}")
             return
         
-        # Всё хорошо — отправляем ответ
+        # Отправляем ответ
         bot.reply_to(message, data["choices"][0]["message"]["content"][:4000])
         
     except requests.exceptions.Timeout:
-        bot.reply_to(message, "⏰ Превышено время ожидания от Venice API. Попробуй ещё раз.")
+        bot.reply_to(message, "⏰ Превышено время ожидания. Попробуй ещё раз.")
     except Exception as e:
         bot.reply_to(message, f"❌ Ошибка: {str(e)}")
 
 # ===== ЗАПУСК =====
-print("✅ Бот запущен на Venice.ai с отладкой!")
-print(f"🔑 Ключ Venice: {VENICE_KEY[:20]}... (скрыто)")
+print("✅ Бот запущен с AI Gateway!")
+print(f"🔗 Шлюз: {GATEWAY_URL}")
 bot.infinity_polling()
