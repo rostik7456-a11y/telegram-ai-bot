@@ -55,7 +55,7 @@ def reply_to_message(message):
         response = requests.post(
             "https://api.venice.ai/api/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {VENICE_KEY}",
+                "X-Venice-API-Key": VENICE_KEY,
                 "Content-Type": "application/json"
             },
             json={
